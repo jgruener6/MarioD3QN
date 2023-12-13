@@ -1,6 +1,6 @@
 import os
 import random
-from collections import deque
+
 import gym
 import gym_super_mario_bros.actions as actions
 import numpy as np
@@ -11,9 +11,12 @@ from keras.layers import Conv2D, Dense, Flatten, Input, Lambda
 from keras.optimizers import Adam
 from keras import backend as K
 from wrappers import wrap_nes
-from utils import plotLearning
+from collections import deque
 
-class ReplyBuffer:
+
+class ReplayBuffer: 
+    #replay buffer
+    # used to hold previous experiences of agent
     def __init__(self, memory_size=20000):
         self.state = deque(maxlen=memory_size)
         self.action = deque(maxlen=memory_size)
@@ -32,12 +35,13 @@ class ReplyBuffer:
         return len(self.done)
 
 class Agent:
+    #initializing environment as well as all paramaters for the model
     def __init__(self, env, memory_size=20000):
         self.env = env
         self.state_size = env.observation_space.shape[0]
         self.action_size = env.action_space.n
         self.observation_shape = env.observation_space.shape
-        self.memory = ReplyBuffer(memory_size=memory_size)
+        self.memory = ReplayBuffer(memory_size=memory_size)
         self.batch_size = 32
         self.update_frequency = 4
         self.tau = 1000
@@ -51,6 +55,7 @@ class Agent:
         self.target_model.set_weights(self.model.get_weights())
 
     def _build_model(self):
+        #builds D3QN model using TF/Keras 
         input_shape = self.observation_shape
 
         input_layer = Input(shape=input_shape)
@@ -67,11 +72,6 @@ class Agent:
         fc_value = Dense(512, activation='elu', kernel_initializer='random_uniform')(flattened)
         value = Dense(1, activation='linear')(fc_value)
 
-        # Combine advantage and value to get final Q-values
-        # def dueling_operator(advantage, value):
-        #     return value + advantage - K.mean(advantage, axis=1, keepdims=True)
-
-# Replace the Lambda layer in _build_model method
         combined = Lambda(lambda x: x[1] + x[0] - K.mean(x[0], axis=1, keepdims=True), output_shape=(self.action_size,))([advantage, value])
 
         model = Model(inputs=input_layer, outputs=combined)
@@ -79,19 +79,23 @@ class Agent:
         return model
 
     def update_target_network(self):
+        #updates target network
         self.target_model = clone_model(self.model)
         self.target_model.set_weights(self.model.get_weights())
 
     def memorize(self, state, action, reward, next_state, done):
+        #appends recent experience to replay buffer
         self.memory.append(state, action, reward, next_state, done)
 
     def act(self, state):
+        #tells agent whether to explore or not using epsilon greedy approach
         if random.uniform(0, 1) < self.epsilon:
             return random.randrange(self.action_size)
         else:
             return np.argmax(self.model.predict(state)[0])
 
-    def experience_reply(self):
+    def experience_Replay(self):
+        #gathers experiences from replay buffer
         if self.batch_size > len(self.memory):
             return
 
@@ -119,16 +123,18 @@ class Agent:
         )
 
     def load_weights(self, weights_file):
+        #loads weights from best run
         self.epsilon = self.epsilon_min
         self.model.load_weights(weights_file)
 
     def save_weights(self, weights_file):
+        #saves weights to file
         self.model.save_weights(weights_file)
 
 
 if __name__ == "__main__":
     try:
-        monitor = True
+        monitor = True #Set to False if you don't want to record
         env = wrap_nes("SuperMarioBros-1-2-v0", actions.SIMPLE_MOVEMENT)
 
         if monitor:
@@ -141,19 +147,21 @@ if __name__ == "__main__":
 
         agent = Agent(env=env, memory_size=20000)
 
-        if os.path.isfile("super_mario_bros_v0.h5"):
-            agent.load_weights("super_mario_bros_v0 copy.h5")
+        if os.path.isfile("super_mario_bros_v0.h5"): #loads best model from file, if it exists
+            agent.load_weights("super_mario_bros_v0.h5")
 
         scores =[]
         eps_hist = []
         counter = 0
         for episode in range(num_episodes):
+            #this loop runs the actual environment and allows the agent to learn
+            #loops each episode until time runs out or the agent dies
             total_reward = 0
             observation = env.reset()
             state = np.reshape(observation, (1,) + env.observation_space.shape)
 
             for episode_step in range(num_episode_steps):
-                env.render(mode="human")
+                env.render(mode="human") #shows the agent actually playing, comment out for better performance
                 action = agent.act(state)
                 observation, reward, done, _ = env.step(action)
                 total_reward += reward
@@ -161,7 +169,7 @@ if __name__ == "__main__":
                 agent.memorize(state, action, reward, next_state, done)
 
                 if frame_count % agent.update_frequency == 0:
-                    agent.experience_reply()
+                    agent.experience_Replay()
 
                 if frame_count % agent.tau == 0:
                     agent.update_target_network()
@@ -205,5 +213,3 @@ if __name__ == "__main__":
         # plt.show()
 
 
-
-### Episode 4433/50000 finished after 443 episode steps with total reward = 316.900000.s
