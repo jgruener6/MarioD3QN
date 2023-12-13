@@ -206,13 +206,6 @@ class CustomReward(gym.Wrapper):
 
 
 def wrap_nes(env_id, action_space):
-    """
-    Configure environment for NES.
-
-    :param env_id: (str) the environment ID
-    :param action_space: (list) action space
-    :return: (Gym Environment) the wrapped environment
-    """
     env = gym.make(env_id)
     # env = retro.RetroEnv(game =env_id)
     env = JoypadSpace(env, action_space)
